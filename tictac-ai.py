@@ -136,7 +136,7 @@ def play_game(epsilon):
     """Game Loop."""
     board = np.full((3, 3), ' ')  # Empty 3x3 board
     print_board(board)
-    current_player = 'O'  # X starts the game
+    current_player = 'O'  # O starts the game
     done = False
     ai_last_move = None  # Initialize this variable outside the loop
 
@@ -183,7 +183,7 @@ def play_game(epsilon):
     return done
 
 # Train the AI by playing many games
-for i in range(30000):
+for i in range(500):
     epsilon = max(0.1, epsilon * 0.995)  # Slower decay rate
     play_game(epsilon)
     
@@ -213,61 +213,76 @@ def ai_move(board):
     return best_move
 
 def user_play(board):
-    """Allow the user to play against the trained AI."""
-    
-    reward = 0  # Default reward if the game isn't finished
+    """Allow the user to play against the trained AI and let the AI continue learning."""
     done = False  # Game completion flag
-    
+    current_player = 'O'  # User starts as 'O'
+
     while not done:
         print_board(board)
-        
-        # User's turn
-        while True:
-            try:
-                row = int(input("Enter row (1-3): ")) - 1
-                col = int(input("Enter column (1-3): ")) - 1
-                if board[row, col] == ' ':
-                    board[row, col] = 'X'  # User plays as 'X'
-                    break
+
+        if current_player == 'O':  # User's turn
+            while True:
+                try:
+                    row = int(input("Enter row (1-3): ")) - 1
+                    col = int(input("Enter column (1-3): ")) - 1
+                    if board[row, col] == ' ':
+                        board[row, col] = 'O'  # User plays as 'O'
+                        break
+                    else:
+                        print("This spot is already taken.")
+                except (ValueError, IndexError):
+                    print("Invalid input, please enter valid row and column values.")
+
+            # Check for game outcome after user's move
+            if verify_win(board, 'O'):
+                print_board(board)
+                print("You win!")
+                reward = -10  # Penalize the AI for losing
+                update_q_table(board, (row, col), reward, board.copy(), True)
+                done = True
+            elif verify_draw(board):
+                print_board(board)
+                print("It's a draw!")
+                reward = 0  # Neutral reward for a draw
+                update_q_table(board, (row, col), reward, board.copy(), True)
+                done = True
+            else:
+                # Intermediate state: No reward for the user's move
+                update_q_table(board, (row, col), 0, board.copy(), False)
+                current_player = 'X'  # Switch to AI's turn
+
+        else:  # AI's turn
+            move = ai_move(board)
+            board[move[0], move[1]] = 'X'  # AI plays as 'X'
+
+            print(f"AI played at row {move[0] + 1}, col {move[1] + 1}")
+            print_board(board)
+
+            # Check for game outcome after AI's move
+            if verify_win(board, 'X'):
+                print("AI wins!")
+                reward = 10  # Reward for winning
+                update_q_table(board, move, reward, board.copy(), True)
+                done = True
+            elif verify_draw(board):
+                print("It's a draw!")
+                reward = 1  # Small reward for a draw
+                update_q_table(board, move, reward, board.copy(), True)
+                done = True
+            else:
+                # Intermediate state: Check for blocking or setting up a win
+                if is_opponent_winning_next_turn(board):
+                    reward = 3  # Reward for blocking
+                elif is_ai_setting_up_win(board):
+                    reward = 2  # Reward for setting up a win
                 else:
-                    print("This spot is already taken.")
-            except (ValueError, IndexError):
-                print("Invalid input, please enter valid row and column values.")
-        
-        # Check for game outcome after user's move
-        if verify_win(board, 'X'):
-            print_board(board)
-            print("You win!")
-            reward = -1
-            done = True
-        elif verify_draw(board):
-            print_board(board)
-            print("It's a draw!")
-            reward = 0
-            done = True
+                    reward = 0  # Neutral reward
+                    
+                update_q_table(board, move, reward, board.copy(), False)
+                current_player = 'O'  # Switch to User's turn
 
-        if done:  # If game is over, skip AI's turn
-            break
-        
-        # AI's turn
-        row, col = ai_move(board)
-        board[row, col] = 'O'
-        print(f"AI played at row {row + 1}, col {col + 1}")
-        
-        # Check for game outcome after AI's move
-        if verify_win(board, 'O'):
-            print_board(board)
-            print("AI wins!")
-            reward = 1
-            done = True
-        elif verify_draw(board):
-            print_board(board)
-            print("It's a draw!")
-            reward = 0
-            done = True
 
-    # Update Q-table after the game ends
-    update_q_table(board, (row, col), reward, board.copy(), done)
+  
 
 
 # Start the game after 
