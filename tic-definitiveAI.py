@@ -3,12 +3,17 @@ import random
 from collections import defaultdict
 
 # Initialize the Q-table
-q_table = defaultdict(float)  # Default value of 0.0 for any (state, action) pair
+q_table = defaultdict(lambda: random.uniform(-0.01, 0.01))  # Add slight randomness to unvisited Q-values
 
 # Hyperparameters for Q-learning
 learning_rate = 0.1       # α: How much we update Q-values
 discount_factor = 0.9     # γ: How much future rewards matter
+
 exploration_rate = 0.2    # ε: Probability of choosing a random action
+
+# Decay exploration rate
+exploration_rate_min = 0.01
+exploration_rate_decay = 0.999  # Decay rate per game
 
 # Initialize the Tic-Tac-Toe board using NumPy
 board = np.full((3, 3), ' ')  # A 3x3 grid
@@ -24,6 +29,7 @@ def update_q_table(state, action, reward, next_state, done):
         next_max_q = max(q_table[(next_state, next_action)] 
                          for next_action in get_empty_positions(np.array(next_state).reshape(3, 3)))
         q_table[(state, action)] = current_q + learning_rate * (reward + discount_factor * next_max_q - current_q)
+    print(f"Q-table updated: {state} -> {action}, Reward: {reward}, Next state: {next_state}")
 
 def get_empty_positions(board):
     """Get a list of all empty positions on the board."""
@@ -81,7 +87,7 @@ def print_board(board):
         print("-" * 9)
 
 def is_opponent_one_move_from_win(board, current_player):
-    """Check if the opponent can win in one move."""
+    """Check if the either can win in one move."""
     # Determine the opponent's symbol
     opponent = 'X' if current_player == 'O' else 'O'
     
@@ -95,6 +101,7 @@ def is_opponent_one_move_from_win(board, current_player):
                 # Check if this results in a win for the opponent
                 if is_winner(board, opponent):
                     board[i, j] = ' '  # Undo the move
+                    print("Player " + opponent + " has a winning move next turn")
                     return True, (i, j)
                 
                 # Undo the move
@@ -103,7 +110,7 @@ def is_opponent_one_move_from_win(board, current_player):
     # If no winning move is found
     return False, None
 
-def blocked_opponent_move(board, move, current_player, opponent_win_cond):
+def check_move_condition(board, move, current_player, opponent_win_cond):
     """Check if the current move blocks the opponent from winning."""
     # If there was no winning move condition, no need to check
     if opponent_win_cond is None:
@@ -115,6 +122,7 @@ def blocked_opponent_move(board, move, current_player, opponent_win_cond):
     # Check if the current move matches the opponent's winning move coordinates
     if (row, col) == opponent_win_cond:
         return True
+        
     
     return False
 
@@ -128,7 +136,9 @@ def self_play():
     state = tuple(board.flatten())  # Flatten the board for easy state tracking
     
     while True:
-        winning_move, winning_move_coords = is_opponent_one_move_from_win(board, current_player)
+        winning_move_block, winning_move_block_coords = is_opponent_one_move_from_win(board, current_player)
+        winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'X')
+
         move = exploration_move(board, current_player)
         
         # After making the move, get the next state
@@ -142,12 +152,17 @@ def self_play():
         elif is_draw(board):
             reward = 0  # Draw
             done = True
-        elif winning_move: #If a winning move existed, verifies if player blocked it
+        elif winning_move_current: #If a winning move existed for current player and he didnt took it
+            if not check_move_condition(board, move, current_player, winning_move_current_coords):
+                reward = -5 
+                print("Didnt take the winning move")
+        elif winning_move_block: #If a winning move existed, verifies if player blocked it
             # Check if the move blocks an opponent's winning move
-            if blocked_opponent_move(board, move, current_player, winning_move_coords):
+            if check_move_condition(board, move, current_player, winning_move_block_coords):
                 reward = 5  # Reward for blocking the opponent's win
+                print("Block opponent move")
             else:
-                reward = -5  # Penalty for not blocking the opponent's win
+                reward = -5  # Penalty for not blocking the opponent's wi
         else: 
             reward = 0 # normal move
             done = False
@@ -258,13 +273,15 @@ def simulate_ai_vs_player():
 # Play multiple self-play games
 def test_self_play(num_games):
     """Let the AI play multiple games against itself."""
+    global exploration_rate  # Declare exploration_rate as global
     for game in range(num_games):
         print(f"Game {game + 1}:")
         self_play()
+        exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
         print("\n" + "="*20 + "\n")
 
 # Test self-play for 20 games
-test_self_play(40000)
+test_self_play(20)
 
 while True:
      simulate_ai_vs_player()
