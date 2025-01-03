@@ -9,7 +9,7 @@ q_table = defaultdict(lambda: random.uniform(-0.01, 0.01))  # Add slight randomn
 learning_rate = 0.1       # α: How much we update Q-values
 discount_factor = 0.9     # γ: How much future rewards matter
 
-exploration_rate = 0.2    # ε: Probability of choosing a random action
+exploration_rate = 0.3    # ε: Probability of choosing a random action
 
 # Decay exploration rate
 exploration_rate_min = 0.01
@@ -29,7 +29,6 @@ def update_q_table(state, action, reward, next_state, done):
         next_max_q = max(q_table[(next_state, next_action)] 
                          for next_action in get_empty_positions(np.array(next_state).reshape(3, 3)))
         q_table[(state, action)] = current_q + learning_rate * (reward + discount_factor * next_max_q - current_q)
-    print(f"Q-table updated: {state} -> {action}, Reward: {reward}, Next state: {next_state}")
 
 def get_empty_positions(board):
     """Get a list of all empty positions on the board."""
@@ -81,6 +80,7 @@ def is_draw(board):
 
 def print_board(board):
     """Print the Tic-Tac-Toe board."""
+    
     print("-" * 9)
     for row in board:
         print(" | ".join(row))
@@ -101,7 +101,7 @@ def is_opponent_one_move_from_win(board, current_player):
                 # Check if this results in a win for the opponent
                 if is_winner(board, opponent):
                     board[i, j] = ' '  # Undo the move
-                    print("Player " + opponent + " has a winning move next turn")
+                    print("Player " + opponent + " has a winning move next turn \n")
                     return True, (i, j)
                 
                 # Undo the move
@@ -137,7 +137,7 @@ def self_play():
     
     while True:
         winning_move_block, winning_move_block_coords = is_opponent_one_move_from_win(board, current_player)
-        winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'X')
+        winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'O')
 
         move = exploration_move(board, current_player)
         
@@ -155,14 +155,15 @@ def self_play():
         elif winning_move_current: #If a winning move existed for current player and he didnt took it
             if not check_move_condition(board, move, current_player, winning_move_current_coords):
                 reward = -5 
-                print("Didnt take the winning move")
+                print(f"Penalty of {reward} to {current_player} for not taking the winning move")
         elif winning_move_block: #If a winning move existed, verifies if player blocked it
             # Check if the move blocks an opponent's winning move
             if check_move_condition(board, move, current_player, winning_move_block_coords):
                 reward = 5  # Reward for blocking the opponent's win
-                print("Block opponent move")
+                print(f"Reward of {reward} to {current_player} for  blocking winning move")
             else:
                 reward = -5  # Penalty for not blocking the opponent's wi
+                print(f"Penalty of {reward} to {current_player} for not blocking winning move")
         else: 
             reward = 0 # normal move
             done = False
@@ -281,7 +282,7 @@ def test_self_play(num_games):
         print("\n" + "="*20 + "\n")
 
 # Test self-play for 20 games
-test_self_play(20)
+test_self_play(30000)
 
 while True:
      simulate_ai_vs_player()
