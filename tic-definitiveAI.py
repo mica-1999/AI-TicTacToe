@@ -8,10 +8,7 @@ q_table = defaultdict(lambda: random.uniform(-0.01, 0.01))  # Add slight randomn
 # Hyperparameters for Q-learning
 learning_rate = 0.1       # α: How much we update Q-values
 discount_factor = 0.9     # γ: How much future rewards matter
-
-exploration_rate = 0.3    # ε: Probability of choosing a random action
-
-# Decay exploration rate
+exploration_rate = 0.4    # ε: Probability of choosing a random action
 exploration_rate_min = 0.01
 exploration_rate_decay = 0.999  # Decay rate per game
 
@@ -69,9 +66,6 @@ def exploration_move(board, symbol):
                 best_move = move
         
         move = best_move
-    
-    # Perform the selected move on the board
-    board[move[0], move[1]] = symbol
     return move
 
 def is_draw(board):
@@ -123,166 +117,94 @@ def check_move_condition(board, move, current_player, opponent_win_cond):
     if (row, col) == opponent_win_cond:
         return True
         
-    
     return False
 
-# Play a single game with self-play
-def self_play():
-    """Let the AI play against itself."""
+def get_human_move(board):
+    """Prompt the human player for a move."""
+    while True:
+        try:
+            row, col = map(int, input("Enter your move (row col): ").split())
+            row -= 1  # Convert to 0-based indexing
+            col -= 1  # Convert to 0-based indexing
+            if board[row, col] == ' ':
+                return (row, col)
+            else:
+                print("Invalid move, cell already occupied. Try again.")
+        except (ValueError, IndexError):
+            print("Invalid input. Please enter row and column as two integers separated by a space.")
+
+def play_game(player1_type, player2_type):
+    """Play a game with configurable player types (AI or Human)."""
     board = np.full((3, 3), ' ')  # Reset the board
     current_player = 'X'
-
-    # Start tracking the state before the move
-    state = tuple(board.flatten())  # Flatten the board for easy state tracking
+    state = tuple(board.flatten()) # Flatten the board for easy state tracking
+    done = False
     
     while True:
         winning_move_block, winning_move_block_coords = is_opponent_one_move_from_win(board, current_player)
         winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'O')
-
-        move = exploration_move(board, current_player)
         
-        # After making the move, get the next state
+        # Determine the type of the current player
+        if current_player == 'X' and player1_type == "Human" or current_player == 'O' and player2_type == "Human":
+            move = get_human_move(board)
+        else:
+            move = exploration_move(board, current_player)
+
+        # Make the move on the board
+        board[move] = current_player
         next_state = tuple(board.flatten())
         print_board(board)
 
         # Check if the game is over (win or draw)
         if is_winner(board, current_player):
-            reward = 10  # Win
+            reward = 10 # Win
+            print(f"{current_player} wins!")
             done = True
         elif is_draw(board):
-            reward = 0  # Draw
+            reward = 0 # Draw
+            print("It's a draw!")
             done = True
-        elif winning_move_current: #If a winning move existed for current player and he didnt took it
-            if not check_move_condition(board, move, current_player, winning_move_current_coords):
-                reward = -5 
-                print(f"Penalty of {reward} to {current_player} for not taking the winning move")
-        elif winning_move_block: #If a winning move existed, verifies if player blocked it
-            # Check if the move blocks an opponent's winning move
-            if check_move_condition(board, move, current_player, winning_move_block_coords):
-                reward = 5  # Reward for blocking the opponent's win
-                print(f"Reward of {reward} to {current_player} for  blocking winning move")
+        elif winning_move_current: # If a winning move existed for current player and he didnt took it
+            if not check_move_condition(board,move,current_player,winning_move_current_coords):
+                reward = -5
+                print(f"\n Penalty of  {reward} to {current_player} for not taking the winning move")
+        elif winning_move_block: # If a winning move existed, verifies if player blocked it
+            if check_move_condition(board,move,current_player,winning_move_block_coords):
+                reward = 5 # Reward for blocking an opponent winning move
+                print(f"\n Reward of  {reward} to {current_player} for blocking the opponent winning move")
             else:
-                reward = -5  # Penalty for not blocking the opponent's wi
-                print(f"Penalty of {reward} to {current_player} for not blocking winning move")
-        else: 
-            reward = 0 # normal move
-            done = False
-
-        # Update the Q-table based on the move made
-        update_q_table(state, move, reward, next_state, done)
+                reward = -5 # Reward for not blocking an opponent winning move
+                print(f"\n Penalty of  {reward} to {current_player} for not blocking the opponent winning move")
+        else:
+            reward = 0 # Normal move
+       
+        
+        update_q_table(state,move,reward,next_state,done)
+        state = next_state # Update the state for the next move
 
         if done:
-            print(f"{current_player} wins!" if reward == 10 else "It's a draw!")
             break
-        
+
         # Switch players
         current_player = 'X' if current_player == 'O' else 'O'
-        state = next_state  # Update the state for the next move
 
-# AI vs Human
-def simulate_ai_vs_player():
-    """Simulate AI vs player, after 20 self-play games."""
-    board = np.full((3, 3), ' ')  # Reset the board
-    current_player = 'X'  # Human starts as 'X'
-    winning_move = False
-    done = False
+def run_self_play_and_human_mode():
+    """Run AI-vs-AI for 3000 games, then switch to AI-vs-Human mode forever."""
+    print("Starting 3000 AI-vs-AI games...")
+    ai_wins = 0
+    human_wins = 0
+    draws = 0
+    global exploration_rate
+    for game in range(30000):
+        play_game(player1_type="AI", player2_type="AI")
+        exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
+        
+
+    print(f"AI-vs-AI games completed. Results: AI wins: {ai_wins}, Draws: {draws}")
+    print("Switching to AI-vs-Human mode...")
 
     while True:
-        # Print current board state
-        print_board(board)
-        
-        # Player's turn
-        if current_player == 'X':
-            valid_move = False
-            while not valid_move:
-                try:
-                    # Prompt player for input
-                    row, col = map(int, input("Enter your move (row col): ").split())
-                    row -= 1  # Convert to 0-based indexing
-                    col -= 1  # Convert to 0-based indexing
-                    if board[row, col] == ' ':  # Check if the cell is empty
-                        move = (row, col)
-                        board[row, col] = 'X'  # Make the move
-                        valid_move = True
-                        # Switch to AI's turn
-                    else:
-                        print("Invalid move, cell already occupied. Try again.")
-                except (ValueError, IndexError):
-                    print("Invalid input. Please enter row and column as two integers separated by a space.")
+        play_game(player1_type="Human", player2_type="AI")
 
-
-        # AI's turn
-        if current_player == 'O':
-            # Flatten the board to create a state tuple
-            state = tuple(board.flatten())
-
-            # Check if the state is new or known
-            if (state, None) in q_table:
-                print("State is known.")
-
-                # Print rewards for all possible moves from the Q-table
-                print("Possible moves and rewards:")
-                empty_positions = get_empty_positions(board)
-                for move in empty_positions:
-                    # Get the action (move) rewards from the Q-table
-                    if (state, move) in q_table:
-                        reward = q_table[(state, move)]
-                    else:
-                        reward = 0  # If there's no reward for this move, assume it as 0
-                    # Print the move and its reward
-                    print(f"Move {move} - Reward: {reward}")
-            else:
-                print("State is new.")
-
-            winning_move, winning_move_coords = is_opponent_one_move_from_win(board, current_player)
-            move = exploration_move(board, current_player)
-            # After making the move, get the next state
-            next_state = tuple(board.flatten())
-            print(f"AI chooses move {move}")
-
-        # Check if the game is over (win or draw)
-        if is_winner(board, current_player):
-            reward = 10  # Win
-            done = True
-        elif is_draw(board):
-            reward = 0  # Draw
-            done = True
-        elif winning_move: #If a winning move existed, verifies if player blocked it
-            # Check if the move blocks an opponent's winning move
-            if current_player == 'O' and blocked_opponent_move(board, move, current_player, winning_move_coords):
-                reward = 5  # Reward for blocking the opponent's win
-                done = False
-            else:
-                reward = -5  # Penalty for not blocking the opponent's win
-                done = False
-        else: 
-            reward = 0 # normal move
-            done = False
-
-        if (current_player == 'O'):
-            # Update the Q-table based on the move made
-            update_q_table(state, move, reward, next_state, done)
-        
-        # Switch players
-        current_player = 'X' if current_player == 'O' else 'O'
-
-        if done:
-            print(f"{current_player} wins!" if reward == 10 else "It's a draw!")
-            break
- 
-
-# Play multiple self-play games
-def test_self_play(num_games):
-    """Let the AI play multiple games against itself."""
-    global exploration_rate  # Declare exploration_rate as global
-    for game in range(num_games):
-        print(f"Game {game + 1}:")
-        self_play()
-        exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
-        print("\n" + "="*20 + "\n")
-
-# Test self-play for 20 games
-test_self_play(30000)
-
-while True:
-     simulate_ai_vs_player()
+# Run:
+run_self_play_and_human_mode()

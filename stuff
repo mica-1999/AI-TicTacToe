@@ -1,0 +1,53 @@
+
+# Play a single game with self-play
+def self_play():
+    """Let the AI play against itself."""
+    board = np.full((3, 3), ' ')  # Reset the board
+    current_player = 'X'
+
+    # Start tracking the state before the move
+    state = tuple(board.flatten())  # Flatten the board for easy state tracking
+    
+    while True:
+        winning_move_block, winning_move_block_coords = is_opponent_one_move_from_win(board, current_player)
+        winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'O')
+
+        move = exploration_move(board, current_player)
+        
+        # After making the move, get the next state
+        next_state = tuple(board.flatten())
+        print_board(board)
+
+        # Check if the game is over (win or draw)
+        if is_winner(board, current_player):
+            reward = 10  # Win
+            done = True
+        elif is_draw(board):
+            reward = 0  # Draw
+            done = True
+        elif winning_move_current: #If a winning move existed for current player and he didnt took it
+            if not check_move_condition(board, move, current_player, winning_move_current_coords):
+                reward = -5 
+                print(f"Penalty of {reward} to {current_player} for not taking the winning move")
+        elif winning_move_block: #If a winning move existed, verifies if player blocked it
+            # Check if the move blocks an opponent's winning move
+            if check_move_condition(board, move, current_player, winning_move_block_coords):
+                reward = 5  # Reward for blocking the opponent's win
+                print(f"Reward of {reward} to {current_player} for  blocking winning move")
+            else:
+                reward = -5  # Penalty for not blocking the opponent's wi
+                print(f"Penalty of {reward} to {current_player} for not blocking winning move")
+        else: 
+            reward = 0 # normal move
+            done = False
+
+        # Update the Q-table based on the move made
+        update_q_table(state, move, reward, next_state, done)
+
+        if done:
+            print(f"{current_player} wins!" if reward == 10 else "It's a draw!")
+            break
+        
+        # Switch players
+        current_player = 'X' if current_player == 'O' else 'O'
+        state = next_state  # Update the state for the next move
