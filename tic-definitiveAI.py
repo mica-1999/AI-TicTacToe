@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import random
 from collections import defaultdict
@@ -8,12 +9,17 @@ q_table = defaultdict(lambda: random.uniform(-0.01, 0.01))  # Add slight randomn
 # Hyperparameters for Q-learning
 learning_rate = 0.1       # α: How much we update Q-values
 discount_factor = 0.9     # γ: How much future rewards matter
-exploration_rate = 0.4    # ε: Probability of choosing a random action
+exploration_rate = 0.7    # ε: Probability of choosing a random action
 exploration_rate_min = 0.01
 exploration_rate_decay = 0.999  # Decay rate per game
 
 # Initialize the Tic-Tac-Toe board using NumPy
 board = np.full((3, 3), ' ')  # A 3x3 grid
+
+# Define global counters
+ai_wins = 0
+human_wins = 0
+draws = 0
 
 def update_q_table(state, action, reward, next_state, done):
     """Update Q-values using the Q-learning formula."""
@@ -135,6 +141,7 @@ def get_human_move(board):
 
 def play_game(player1_type, player2_type):
     """Play a game with configurable player types (AI or Human)."""
+    global ai_wins, human_wins, draws
     board = np.full((3, 3), ' ')  # Reset the board
     current_player = 'X'
     state = tuple(board.flatten()) # Flatten the board for easy state tracking
@@ -148,7 +155,14 @@ def play_game(player1_type, player2_type):
         if current_player == 'X' and player1_type == "Human" or current_player == 'O' and player2_type == "Human":
             move = get_human_move(board)
         else:
-            move = exploration_move(board, current_player)
+            # If the AI is the second player (playing as 'O'), prioritize taking the middle
+            if current_player == 'O' and board[1, 1] == ' ':  # Check if middle is available
+                move = (1, 1)  # Take the middle spot
+                reward = 3  # Reward for taking the middle
+                print(f"AI takes the middle!")
+            else:
+                move = exploration_move(board, current_player)
+                reward = 0  # No special reward for other moves
 
         # Make the move on the board
         board[move] = current_player
@@ -158,12 +172,20 @@ def play_game(player1_type, player2_type):
         # Check if the game is over (win or draw)
         if is_winner(board, current_player):
             reward = 10 # Win
-            print(f"{current_player} wins!")
+            print(f" Reward of  {reward} to {current_player} for winning")
+            print(f"\n {current_player} wins!")
             done = True
+            if player1_type =="AI":
+                ai_wins += 1  # AI win
+            else:
+                human_wins += 1 # Human Win
+
         elif is_draw(board):
             reward = 0 # Draw
             print("It's a draw!")
             done = True
+            draws += 1  # AI win
+
         elif winning_move_current: # If a winning move existed for current player and he didnt took it
             if not check_move_condition(board,move,current_player,winning_move_current_coords):
                 reward = -5
@@ -191,15 +213,13 @@ def play_game(player1_type, player2_type):
 def run_self_play_and_human_mode():
     """Run AI-vs-AI for 3000 games, then switch to AI-vs-Human mode forever."""
     print("Starting 3000 AI-vs-AI games...")
-    ai_wins = 0
-    human_wins = 0
-    draws = 0
-    global exploration_rate
-    for game in range(30000):
+    global ai_wins, human_wins, draws, exploration_rate
+    for game in range(3000):
         play_game(player1_type="AI", player2_type="AI")
         exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
         
-
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(exploration_rate)
     print(f"AI-vs-AI games completed. Results: AI wins: {ai_wins}, Draws: {draws}")
     print("Switching to AI-vs-Human mode...")
 
