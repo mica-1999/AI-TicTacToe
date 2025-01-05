@@ -1,7 +1,11 @@
 import os
 import numpy as np
 import random
+import threading
 from collections import defaultdict
+import sys
+import contextlib
+import logging
 
 # Initialize the Q-table
 q_table = defaultdict(lambda: random.uniform(-0.01, 0.01))  # Add slight randomness to unvisited Q-values
@@ -21,17 +25,25 @@ ai_wins = 0
 human_wins = 0
 draws = 0
 
+# Lock for synchronizing access to the counters (same idea as Q-table lock)
+counter_lock = threading.Lock()
+q_table_lock = threading.Lock()  
+
+# Set up logging to a file
+logging.basicConfig(filename='learning_thread.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+
 def update_q_table(state, action, reward, next_state, done):
     """Update Q-values using the Q-learning formula."""
-    current_q = q_table[(state, action)]
-    if done:
-        # If the game is over, there's no next state
-        q_table[(state, action)] = current_q + learning_rate * (reward - current_q)
-    else:
-        # Non-terminal state
-        next_max_q = max(q_table[(next_state, next_action)] 
-                         for next_action in get_empty_positions(np.array(next_state).reshape(3, 3)))
-        q_table[(state, action)] = current_q + learning_rate * (reward + discount_factor * next_max_q - current_q)
+    with q_table_lock:  # Lock to ensure thread-safe update of the Q-table
+        current_q = q_table[(state, action)]
+        if done:
+            # If the game is over, there's no next state
+            q_table[(state, action)] = current_q + learning_rate * (reward - current_q)
+        else:
+            # Non-terminal state
+            next_max_q = max(q_table[(next_state, next_action)] 
+                            for next_action in get_empty_positions(np.array(next_state).reshape(3, 3)))
+            q_table[(state, action)] = current_q + learning_rate * (reward + discount_factor * next_max_q - current_q)
 
 def get_empty_positions(board):
     """Get a list of all empty positions on the board."""
@@ -101,7 +113,7 @@ def is_opponent_one_move_from_win(board, current_player):
                 # Check if this results in a win for the opponent
                 if is_winner(board, opponent):
                     board[i, j] = ' '  # Undo the move
-                    print("Player " + opponent + " has a winning move next turn \n")
+                    # print("Player " + opponent + " has a winning move next turn \n")
                     return True, (i, j)
                 
                 # Undo the move
@@ -147,7 +159,10 @@ def play_game(player1_type, player2_type):
     state = tuple(board.flatten()) # Flatten the board for easy state tracking
     done = False
     
+    
     while True:
+        
+        print_board(board)
         winning_move_block, winning_move_block_coords = is_opponent_one_move_from_win(board, current_player)
         winning_move_current, winning_move_current_coords = is_opponent_one_move_from_win(board, 'X' if current_player == 'O' else 'O')
         
@@ -159,7 +174,7 @@ def play_game(player1_type, player2_type):
             if current_player == 'O' and board[1, 1] == ' ':  # Check if middle is available
                 move = (1, 1)  # Take the middle spot
                 reward = 3  # Reward for taking the middle
-                print(f"AI takes the middle!")
+                # print(f"AI takes the middle!")
             else:
                 move = exploration_move(board, current_player)
                 reward = 0  # No special reward for other moves
@@ -167,36 +182,37 @@ def play_game(player1_type, player2_type):
         # Make the move on the board
         board[move] = current_player
         next_state = tuple(board.flatten())
-        print_board(board)
 
         # Check if the game is over (win or draw)
         if is_winner(board, current_player):
             reward = 10 # Win
-            print(f" Reward of  {reward} to {current_player} for winning")
+            # print(f" Reward of  {reward} to {current_player} for winning")
             print(f"\n {current_player} wins!")
             done = True
-            if player1_type =="AI":
-                ai_wins += 1  # AI win
-            else:
-                human_wins += 1 # Human Win
+            with counter_lock:  # Lock to ensure thread-safe update of counters
+                if player1_type == "AI":
+                    ai_wins += 1  # AI win
+                else:
+                    human_wins += 1  # Human Win
 
         elif is_draw(board):
             reward = 0 # Draw
             print("It's a draw!")
             done = True
-            draws += 1  # AI win
+            with counter_lock:  # Lock to ensure thread-safe update of counters
+                draws += 1  # Draw
 
         elif winning_move_current: # If a winning move existed for current player and he didnt took it
             if not check_move_condition(board,move,current_player,winning_move_current_coords):
                 reward = -5
-                print(f"\n Penalty of  {reward} to {current_player} for not taking the winning move")
+                 # print(f"\n Penalty of  {reward} to {current_player} for not taking the winning move")
         elif winning_move_block: # If a winning move existed, verifies if player blocked it
             if check_move_condition(board,move,current_player,winning_move_block_coords):
                 reward = 5 # Reward for blocking an opponent winning move
-                print(f"\n Reward of  {reward} to {current_player} for blocking the opponent winning move")
+                # print(f"\n Reward of  {reward} to {current_player} for blocking the opponent winning move")
             else:
                 reward = -5 # Reward for not blocking an opponent winning move
-                print(f"\n Penalty of  {reward} to {current_player} for not blocking the opponent winning move")
+                # print(f"\n Penalty of  {reward} to {current_player} for not blocking the opponent winning move")
         else:
             reward = 0 # Normal move
        
@@ -210,21 +226,47 @@ def play_game(player1_type, player2_type):
         # Switch players
         current_player = 'X' if current_player == 'O' else 'O'
 
-def run_self_play_and_human_mode():
-    """Run AI-vs-AI for 3000 games, then switch to AI-vs-Human mode forever."""
-    print("Starting 3000 AI-vs-AI games...")
+# Event to signal when the learning thread is done
+learning_done_event = threading.Event()
+
+@contextlib.contextmanager
+def suppress_output():
+    """Suppress output to avoid interference with the main thread."""
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = devnull
+        sys.stderr = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+def learning_thread():
+    """Run the Q-learning updates in the background while the game is running."""
     global ai_wins, human_wins, draws, exploration_rate
-    for game in range(3000):
-        play_game(player1_type="AI", player2_type="AI")
-        exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
-        
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print(exploration_rate)
-    print(f"AI-vs-AI games completed. Results: AI wins: {ai_wins}, Draws: {draws}")
-    print("Switching to AI-vs-Human mode...")
+    logging.info("Starting 3000 AI-vs-AI games...")
+    
+    with suppress_output():
+        for game in range(3000):  # Play 3000 self-play games for learning
+            play_game(player1_type="AI", player2_type="AI")
+            exploration_rate = max(exploration_rate * exploration_rate_decay, exploration_rate_min)
+            if game % 10 == 0:
+                logging.info(f"Completed {game} games")
 
-    while True:
-        play_game(player1_type="Human", player2_type="AI")
+    logging.info(f"Exploration rate: {exploration_rate}")
+    logging.info(f"AI-vs-AI games completed. Results: AI wins: {ai_wins}, Draws: {draws}")
+    logging.info("Switching to AI-vs-Human mode...")
+    
+    # Signal that the learning thread is done
+    learning_done_event.set()
 
-# Run:
-run_self_play_and_human_mode()
+# Start the learning thread
+threading.Thread(target=learning_thread, daemon=True).start()
+
+# Wait for the learning thread to finish before starting the human vs AI game
+learning_done_event.wait()
+
+while True:
+    play_game(player1_type="Human", player2_type="AI")
