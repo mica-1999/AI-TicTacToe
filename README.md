@@ -4,6 +4,21 @@
 
 ---
 
+## 📚 Table of Contents
+
+- [Features](#-features)
+- [How It Works](#-how-it-works)
+- [Setup](#-setup)
+- [Usage](#-usage)
+- [File Structure](#-file-structure)
+- [Code Explanation](#-code-explanation)
+- [Examples](#-examples)
+- [FAQ](#-faq)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
 ## 🚀 Features
 
 - 🎮 **Play Modes**:  
@@ -356,6 +371,42 @@ learning_done_event.wait()
 while True:
     play_game(player1_type="Human", player2_type="AI")
 ```
+
+---
+
+## 💡 Examples
+
+### Running the Script
+
+```sh
+python tic-definitiveAI.py
+```
+
+### Expected Output
+
+```
+Starting 3000 AI-vs-AI games...
+...
+AI-vs-AI games completed. Results: AI wins: 1500, Draws: 500
+Switching to AI-vs-Human mode...
+Enter your move (row col):
+```
+
+---
+
+## ❓ FAQ
+
+### How does the AI learn?
+
+The AI uses Q-Learning to update its Q-table based on the rewards it receives from winning, losing, or drawing games.
+
+### Can I adjust the learning parameters?
+
+Yes, you can adjust the learning rate, discount factor, and exploration rate in the script.
+
+### How do I monitor the AI's learning progress?
+
+The AI's learning progress is logged in the `learning_thread.log` file.
 
 ---
 
